@@ -3,7 +3,34 @@ local utils = require("codecompanion.utils")
 
 local fmt = string.format
 
----@class CodeCompanion.Tool.CmdRunner: CodeCompanion.Tools.Tool
+--- Search for how many backticks are used in code block in text
+---@param text string text to search for backticks
+---@return integer number of backticks used
+local function get_code_fence_length(text)
+  local max_consecutive_backticks = 0
+  for match in text:match("```+") do
+    print(match)
+    max_consecutive_backticks = math.max(max_consecutive_backticks, #match)
+  end
+  return max_consecutive_backticks
+end
+
+--- Create a Markdown fenced code block with dynamic fence length
+--- @param language string the Language identifier for the code block.
+--- @param content string the content of the code block.
+--- @return string formatted Markdown code block.
+local function format_codeblock(language, content)
+  local fence_lenght = math.max(3,get_code_fence_length(content)+1)
+  local fence = string.rep("'", fence_lenght)
+  return fmt(
+    "%s%s\n%s\n%s",
+    fence,
+    language,
+    content,
+    fence
+  )
+end
+--- @class CodeCompanion.Tool.CmdRunner: CodeCompanion.Tools.Tool
 return {
   name = "cmd_runner",
   cmds = {
@@ -127,13 +154,10 @@ return {
       local chat = tool.chat
       local errors = vim.iter(stderr):flatten():join("\n")
 
-      local output = [[%s
-```txt
-%s
-```]]
+      local codeblock = format_codeblock("text", errors)
 
-      local llm_output = fmt(output, fmt("There was an error running the `%s` command:", cmd.cmd), errors)
-      local user_output = fmt(output, fmt("`%s` error", cmd.cmd), errors)
+      local llm_output = fmt("There was an error running the `%s` command:\n %s", cmd.cmd, codeblock)
+      local user_output = fmt("`%s` error\n%s", cmd.cmd, codeblock)
 
       chat:add_tool_output(self, llm_output, user_output)
     end,
@@ -154,7 +178,7 @@ return {
 %s
 ```]],
         self.args.cmd,
-        output
+        format_codeblock("txt", output)
       )
       chat:add_tool_output(self, message)
     end,
